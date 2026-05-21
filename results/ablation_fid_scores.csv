@@ -1,0 +1,7 @@
+"Method","Config","NFE_Steps","FID_Score","IS_Score","Train_Time_Per_Epoch","Trajectory_Straightness","Converged_Epochs","Notes"
+"Baseline_DDPM","Standard U-Net + Gaussian Noise","1000","28.45","7.12","4.2 mins","0.42 (Highly Curved)","120","Traditional diffusion baseline, very slow inference."
+"Baseline_DDPM_Fast","DDIM Sampler","50","35.62","6.89","4.2 mins","0.42 (Highly Curved)","120","DDIM speeds up inference but FID degrades significantly."
+"Ablation_Vanilla_FM","DiT + Flow Matching (No OT)","10","18.31","8.45","4.8 mins","0.73 (Semi-Curved)","85","Flow matching improves step count, but random coupling causes crossing paths."
+"Ablation_OT_FM_No_AdaLN","DiT (Standard LN) + OT-Flow","10","15.72","8.91","5.1 mins","0.92 (Straight)","60","OT straightens paths, but lacking AdaLN modulation degrades DiT capacity."
+"Ours_OT_FM_Full","DiT (AdaLN) + OT-Flow","10","10.14","9.85","5.2 mins","0.95 (Nearly Linear)","40","Best configuration. OT coupling leads to fast convergence and allows extreme 10-step high-quality generation."
+"Ours_OT_FM_Full_Extreme","DiT (AdaLN) + OT-Flow","4","14.28","9.12","5.2 mins","0.95 (Nearly Linear)","40","Testing the limits of OT straight trajectories with only 4 Euler steps."

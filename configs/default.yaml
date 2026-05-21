@@ -1,0 +1,21 @@
+# 训练参数
+training:
+  epochs: 100
+  batch_size: 64
+  lr: 1e-4
+  weight_decay: 0.01
+  num_workers: 4
+  save_interval: 10
+  log_interval: 50
+
+# 模型参数
+model:
+  in_channels: 3
+  image_size: 64
+  hidden_size: 384
+  num_layers: 6
+  num_heads: 6
+
+# 流匹配参数
+flow:
+  use_ot: true   # 是否开启最优传输耦合
