@@ -27,9 +27,9 @@ class DiTBlock(nn.Module):
             nn.Linear(hidden_size, 2 * hidden_size)
         )
 
-    def forward(self, x, t_emb):
-        # x: [B, Seq, D], t_emb: [B, D]
-        shift, scale = self.adaLN_modulation(t_emb).chunk(2, dim=-1)
+    def forward(self, x, c_emb):
+        # x: [B, Seq, D], c_emb (time + label): [B, D]
+        shift, scale = self.adaLN_modulation(c_emb).chunk(2, dim=-1)
         # AdaLN
         x_norm = self.norm1(x) * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
         # Attention
@@ -41,12 +41,13 @@ class DiTBlock(nn.Module):
 
 class DiffusionTransformer(nn.Module):
     """
-    支持自适应层归一化 (AdaLN) 的 DiT 模型，用于生成任务。
+    [工业级升级] 支持 CFG (Classifier-Free Guidance) 的 DiT 模型。
     """
-    def __init__(self, in_channels=3, image_size=64, hidden_size=384, num_layers=6, num_heads=6):
+    def __init__(self, in_channels=3, image_size=64, hidden_size=384, num_layers=6, num_heads=6, num_classes=1000):
         super().__init__()
         self.in_channels = in_channels
         self.hidden_size = hidden_size
+        self.num_classes = num_classes
         
         # Patch 嵌入
         self.patch_size = 4
@@ -63,6 +64,9 @@ class DiffusionTransformer(nn.Module):
             nn.Linear(hidden_size, hidden_size)
         )
         
+        # [工业级升级] 类别条件嵌入 (额外 +1 用于 Unconditional 空标签)
+        self.label_emb = nn.Embedding(num_classes + 1, hidden_size)
+        
         # DiT Blocks
         self.blocks = nn.ModuleList([
             DiTBlock(hidden_size, num_heads) for _ in range(num_layers)
@@ -72,7 +76,7 @@ class DiffusionTransformer(nn.Module):
         self.norm_final = nn.LayerNorm(hidden_size)
         self.out_proj = nn.Linear(hidden_size, self.patch_size * self.patch_size * in_channels)
         
-    def forward(self, x, t, condition=None):
+    def forward(self, x, t, y=None):
         B, C, H, W = x.shape
         # Patchify
         x = self.proj(x) # [B, D, H/p, W/p]
@@ -85,9 +89,19 @@ class DiffusionTransformer(nn.Module):
         t_emb = timestep_embedding(t, self.hidden_size)
         t_emb = self.time_embed(t_emb) # [B, D]
         
+        # [工业级升级] 融合条件标签
+        if y is None:
+            # 推理时如果没传 y，默认全用 unconditional
+            y = torch.full((B,), self.num_classes, device=x.device, dtype=torch.long)
+            
+        y_emb = self.label_emb(y) # [B, D]
+        
+        # 将时间和标签特征相加 (或 Concat)，注入 AdaLN
+        c_emb = t_emb + y_emb
+        
         # 经过所有 Block
         for block in self.blocks:
-            x = block(x, t_emb)
+            x = block(x, c_emb)
             
         x = self.norm_final(x)
         x = self.out_proj(x) # [B, Seq, p*p*C]

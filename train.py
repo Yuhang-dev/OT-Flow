@@ -36,12 +36,14 @@ def main():
     )
     
     # 2. 初始化模型
+    # 假设 num_classes=1000 为 ImageNet 标准，真实使用按需配置
     model = DiffusionTransformer(
         in_channels=config['model']['in_channels'],
         image_size=config['model']['image_size'],
         hidden_size=config['model']['hidden_size'],
         num_layers=config['model']['num_layers'],
-        num_heads=config['model']['num_heads']
+        num_heads=config['model']['num_heads'],
+        num_classes=1000 
     ).to(device)
     
     print(f"[*] 模型参数量: {sum(p.numel() for p in model.parameters()) / 1e6:.2f} M")
@@ -61,10 +63,20 @@ def main():
         pbar = tqdm(dataloader, desc=f"Epoch {epoch}/{epochs}")
         for step, x1 in enumerate(pbar):
             x1 = x1.to(device)
+            B = x1.shape[0]
+            
+            # [工业级升级] Classifier-Free Guidance (CFG) 训练策略
+            # 随机生成模拟的 batch 类别 (实际应从 dataset 中获取)
+            y = torch.randint(0, 1000, (B,), device=device)
+            
+            # 10% 的概率将条件丢弃 (替换为 Unconditional Token = 1000)
+            p_uncond = torch.rand(B, device=device)
+            y[p_uncond < 0.1] = 1000
             
             optimizer.zero_grad()
-            # 核心: 计算 OT-Flow Loss
-            loss = flow_matching_loss(model, x1, use_ot=use_ot)
+            
+            # 传入条件标签 y
+            loss = flow_matching_loss(model, x1, y=y, use_ot=use_ot)
             
             loss.backward()
             optimizer.step()
@@ -77,7 +89,6 @@ def main():
         avg_loss = total_loss / len(dataloader)
         print(f"[*] Epoch {epoch} 平均 Loss: {avg_loss:.4f}")
         
-        # 保存检查点
         if epoch % config['training']['save_interval'] == 0:
             ckpt_path = f"checkpoints/epoch_{epoch}.pt"
             torch.save(model.state_dict(), ckpt_path)
